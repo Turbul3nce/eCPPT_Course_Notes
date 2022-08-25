@@ -1,0 +1,48 @@
+Firewall/IDS Evasion
+
+Fragmentation
+Splitting a single packet into smaller ones.
+> This can disable the ability of some Firewall or IDS systems to either apply their packet filtering rules or, to process all the fragments. They may inspect the single fragment, but not the whole packet.
+• Modern iDSs have the ability to rebuild fragmented packets. So may not always work.
+# nmap -sS -f 0.0.0.0 (-f = fragment packets)
+# sudo nmap -f 0.0.0.0 -n -p 80 --disable-arp-ping -Pn (no extra packets displayed on wireshark)
+# sudo nmap -f 0.0.0.0 -p 80 -Pn --data-length 100 --disable-arp-ping (more bytes will cause more fragments)
+# sudo nmap -f -f -sS 0.0.0.0 -p 80 -Pn -n --disable-arp-ping  (add another -f argument cause fragment to become 16 bytes instead of 8)
+• Can also use --mtu to specify a custom ofset size. Must be a multiple of eight. 
+• Use wireshark to check fragmentation
+
+Decoys
+Add noise to the IDS by sending scans from spoofed IP addresses. As a result, a bunch of forged IP's(decoys) will appear on the IDS, along with the attackers real IP, confusing the analyst.
+• A couple considerations with this method:
+   ◇ All decoys need to be up and running
+   ◇ The real IP address shoudl appear in random order to the IDS
+   ◇ ISPs traversed by spoofed traffic lets the traffic go through.
+# sudo nmap -sS -D 0.0.0.0,ME,0.0.0.0 [target 0.0.0.0]  (ME identifies our position. No ME randomizes our position)
+# sudo nmap -D RND:10 0.0.0.0 -sS -p 80 -Pn --disabled-arp-ping   (generate random decoys that dont exsist on the network)
+# sudo hping3 --rand-source -S -p 80 0.0.0.0 -c 3    (generate random spoofed IPs) 
+# sudo hping3 -a 0.0.0.0 -S -p 80 0.0.0.0 (force tcp scan on port 80, spoofing the ip addess of one of the machines in the network)
+
+Timing  Adding Delays!
+Slow down the scan in order to blend with other traffic in the logs of the Firewall/IDS
+nmap -sS -T[0~5] 0.0.0.0
+
+Source Port
+simple method of changing source port. Poorly configured firewalls may allows traffic coming from certain ports.
+• 53 (DNS replies) and 20 (active FTP) are very commonly accepted
+nmap -sS --source-port 53 0.0.0.0
+nmap -g 80 -sS 0.0.0.0/24
+hping3 -S -s 53 --scan known 0.0.0.0
+More info on Firewall and IDS evasion
+http://nmap.org/book/man-bypass-firewalls-ids.html
+
+Advanced Port Scanning
+#sudo nmap -sS --data-length 10 -p 21 0.0.0.0  (add 10 extra bytes into packet header) (Take advantage of firewalls relying on misconfigurations when check packet headers)
+# sudo hping3 -S -p 21 --data 24 0.0.0.0 
+# sudo nmap --spoof-mac apple 0.0.0.0 -p 80 -Pn --disable-arp-ping -n (spoof MAC address to popular )
+# sudo nmap --spoof-mac 0 0.0.0.0 -p 80 -Pn --disable-arp-ping -n (choose a random MAC)
+# sudo nmap --spoof-mac 00:11:22:33:44:55 0.0.0.0 -p 80 -Pn --disable-arp-ping -n (choose a specific MAC)
+# sudo vim hosts.lists <input IPs>
+# sudo nmap -iL hosts.lists -sS -p 80,443,135,5555,21,22 --randomize-hosts  (randomize the host during the scan)
+# sudo nmap -iL hosts.list -sS -p 80,443,135,5555,21,22 --randomize-hosts -T 2   (perform slow scan and randomize the hosts)
+# sudo hpin3 -1 --rand-dest 0.0.0.X -I eth0
+#sudo hping3 -S --scan 80,443,21,22 0.0.0.0 -i u10  (u for microseconds)
