@@ -1,3 +1,3 @@
-# eCPPT_Course_Notes
-Notes from INE's Penetration Testing Professional course.
-I have also included a roughly formatted cheat sheet that will be updated.
+# eCPPTv2 Course Notes
+#### Notes from INE's Penetration Testing Professional course.
+I understand the notes are not neat. I apologize now. I may go through and update them and some point in the future. 
